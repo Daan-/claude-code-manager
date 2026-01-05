@@ -37,8 +37,8 @@ Web-based multi-session manager for Claude Code CLI. Node.js server spawns PTY p
 
 ### WebSocket Protocol
 
-Server -> Client: `sessions`, `status`, `summary`, `output`, `buffer`, `usage`, `context`, `reload`
-Client -> Server: `create`, `switch`, `input`, `archive`, `unarchive`, `rename`, `resize`, `delete`, `open-vscode`
+Server -> Client: `sessions`, `status`, `summary`, `output`, `buffer`, `usage`, `context`, `config`, `reload`
+Client -> Server: `create`, `switch`, `input`, `archive`, `unarchive`, `rename`, `resize`, `delete`, `open-ide`, `set-ide`
 
 ### Session Status States
 

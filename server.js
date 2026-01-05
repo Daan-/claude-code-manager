@@ -10,6 +10,7 @@ const { findAvailablePort } = require('./lib/port-finder')
 const { SessionManager } = require('./lib/session-manager')
 const { UsageTracker, PLAN_LIMITS } = require('./lib/usage-tracker')
 const { ContextTracker } = require('./lib/context-tracker')
+const { ConfigManager } = require('./lib/config-manager')
 
 // Debounce helper - batches rapid calls, only runs once after delay
 function debounce(fn, delay) {
@@ -54,8 +55,13 @@ function validateMessage(msg) {
   // Validate specific message types
   switch (msg.type) {
     case 'create':
-    case 'open-vscode':
+    case 'open-ide':
       return true
+
+    case 'set-ide':
+      return typeof msg.ide === 'string' &&
+        msg.ide.length <= 200 &&
+        (msg.ide !== 'custom' || typeof msg.customCommand === 'string')
 
     case 'switch':
     case 'archive':
@@ -86,6 +92,7 @@ async function main() {
   const sessionManager = new SessionManager()
   const usageTracker = new UsageTracker()
   const contextTracker = new ContextTracker()
+  const configManager = new ConfigManager()
 
   // Initialize sessions (start fresh)
   await sessionManager.loadSessions()
@@ -144,6 +151,12 @@ async function main() {
       sessions: sessionManager.getAllSessions(),
     }))
 
+    // Send config on connect
+    ws.send(JSON.stringify({
+      type: 'config',
+      ...configManager.getClientConfig(),
+    }))
+
     // Send context for active sessions - throttled to avoid spawn storm
     const activeSessions = [...sessionManager.sessions.entries()]
       .filter(([, s]) => !s.archived && s.cwd)
@@ -188,7 +201,7 @@ async function main() {
         if (!validateMessage(msg)) {
           return // Silently ignore invalid messages
         }
-        handleMessage(ws, msg, sessionManager, wss, contextTracker)
+        handleMessage(ws, msg, sessionManager, wss, contextTracker, configManager)
       } catch (e) {
         // JSON parse error - ignore malformed messages
       }
@@ -288,7 +301,7 @@ async function main() {
   })
 }
 
-function handleMessage(ws, msg, sessionManager, wss, contextTracker) {
+function handleMessage(ws, msg, sessionManager, wss, contextTracker, configManager) {
   switch (msg.type) {
     case 'create':
       sessionManager.createSession()
@@ -337,17 +350,39 @@ function handleMessage(ws, msg, sessionManager, wss, contextTracker) {
       sessionManager.deleteSession(msg.sessionId)
       break
 
-    case 'open-vscode': {
+    case 'set-ide': {
+      configManager.setIde(msg.ide)
+      if (msg.ide === 'custom' && msg.customCommand) {
+        configManager.setCustomCommand(msg.customCommand)
+      }
+      // Broadcast updated config to all clients
+      broadcast(wss, {
+        type: 'config',
+        ...configManager.getClientConfig(),
+      })
+      break
+    }
+
+    case 'open-ide': {
       // Security: use spawn with args array to avoid shell injection
       const cwd = process.cwd()
-      const codeProc = spawn('code', [cwd], { stdio: 'ignore', detached: true })
-      codeProc.unref()
-      codeProc.on('error', (err) => console.error('Editor open failed:', err.message))
+      const { command, args } = configManager.resolveIdeCommand(cwd)
+      const ideProc = spawn(command, args, { stdio: 'ignore', detached: true })
+      ideProc.unref()
+      ideProc.on('error', (err) => console.error('Editor open failed:', err.message))
 
       // On macOS, activate the editor window after a short delay
       if (process.platform === 'darwin') {
+        const ide = configManager.getIde()
+        // Build activation script based on selected IDE
+        let appName = 'Code'
+        if (ide === 'cursor') appName = 'Cursor'
+        else if (ide === 'idea') appName = 'IntelliJ'
+        else if (ide === 'webstorm') appName = 'WebStorm'
+        else if (ide === 'zed') appName = 'Zed'
+
         setTimeout(() => {
-          const script = 'tell application "System Events" to set frontmost of first process whose name contains "Code" or name contains "Cursor" to true'
+          const script = `tell application "System Events" to set frontmost of first process whose name contains "${appName}" to true`
           const osa = spawn('osascript', ['-e', script], { stdio: 'ignore' })
           osa.on('error', () => { }) // Ignore activation errors
         }, 300)

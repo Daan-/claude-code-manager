@@ -14,7 +14,20 @@
     <header class="header">
       <div class="header-actions">
         <button id="new-session" class="btn btn-primary">+ New Session</button>
-        <button id="open-vscode" class="btn btn-ghost" title="Open in VS Code">Open IDE</button>
+        <div class="ide-dropdown">
+          <button id="open-ide" class="btn btn-ghost" title="Open in IDE">Open IDE</button>
+          <button id="ide-dropdown-toggle" class="btn btn-ghost ide-dropdown-arrow" title="Select IDE">▾</button>
+          <div id="ide-dropdown-menu" class="ide-dropdown-menu hidden">
+            <button class="ide-option" data-ide="vscode">VS Code</button>
+            <button class="ide-option" data-ide="cursor">Cursor</button>
+            <button class="ide-option" data-ide="idea">IntelliJ IDEA</button>
+            <button class="ide-option" data-ide="webstorm">WebStorm</button>
+            <button class="ide-option" data-ide="zed">Zed</button>
+            <button class="ide-option" data-ide="neovim">Neovim</button>
+            <div class="ide-dropdown-divider"></div>
+            <button class="ide-option" data-ide="custom">Custom...</button>
+          </div>
+        </div>
         <div class="audio-controls">
           <button id="audio-toggle" class="btn btn-ghost audio-toggle" title="Audio notifications (off)">🔇</button>
           <input type="range" id="audio-volume" class="audio-volume" min="0" max="100" value="30" title="Volume">
