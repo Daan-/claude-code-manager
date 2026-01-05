@@ -28,7 +28,9 @@
   const terminalEl = document.getElementById('terminal')
   const noSessionEl = document.getElementById('no-session')
   const newSessionBtn = document.getElementById('new-session')
-  const openVscodeBtn = document.getElementById('open-vscode')
+  const openIdeBtn = document.getElementById('open-ide')
+  const ideDropdownToggle = document.getElementById('ide-dropdown-toggle')
+  const ideDropdownMenu = document.getElementById('ide-dropdown-menu')
   const usageSessionBar = document.getElementById('usage-session-bar')
   const usageSessionTime = document.getElementById('usage-session-time')
   const usageWeeklyBar = document.getElementById('usage-weekly-bar')
@@ -43,6 +45,7 @@
   let currentUsage = null // JSONL estimate fallback
   let accurateUsage = null // From /status
   let usageSource = null // 'claude-status' or 'jsonl-estimate'
+  let ideConfig = { ide: 'vscode', customIdeCommand: '', idePresets: [] }
 
   // Audio notifications
   let audioEnabled = localStorage.getItem('audioNotificationsEnabled') === 'true'
@@ -200,8 +203,38 @@
       send({ type: 'create' })
     })
 
-    openVscodeBtn.addEventListener('click', () => {
-      send({ type: 'open-vscode' })
+    // IDE dropdown
+    openIdeBtn.addEventListener('click', () => {
+      send({ type: 'open-ide' })
+    })
+
+    ideDropdownToggle.addEventListener('click', (e) => {
+      e.stopPropagation()
+      ideDropdownMenu.classList.toggle('hidden')
+    })
+
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+      if (!ideDropdownMenu.contains(e.target) && e.target !== ideDropdownToggle) {
+        ideDropdownMenu.classList.add('hidden')
+      }
+    })
+
+    // IDE option selection
+    ideDropdownMenu.addEventListener('click', (e) => {
+      const option = e.target.closest('.ide-option')
+      if (!option) return
+
+      const ide = option.dataset.ide
+      if (ide === 'custom') {
+        const cmd = prompt('Enter custom IDE command:\n\nUse {path} as placeholder for the project path, or just enter the command name to append the path.\n\nExamples:\n  idea\n  kitty nvim {path}', ideConfig.customIdeCommand || '')
+        if (cmd !== null && cmd.trim()) {
+          send({ type: 'set-ide', ide: 'custom', customCommand: cmd.trim() })
+        }
+      } else {
+        send({ type: 'set-ide', ide })
+      }
+      ideDropdownMenu.classList.add('hidden')
     })
 
     // Close name editing on escape
@@ -392,7 +425,39 @@
           updateSessionContext(msg.sessionId, msg.display, msg.pct)
         }
         break
+
+      case 'config':
+        ideConfig = {
+          ide: msg.ide || 'vscode',
+          customIdeCommand: msg.customIdeCommand || '',
+          idePresets: msg.idePresets || []
+        }
+        updateIdeDropdown()
+        break
     }
+  }
+
+  function updateIdeDropdown() {
+    // Update selected state in dropdown
+    const options = ideDropdownMenu.querySelectorAll('.ide-option')
+    options.forEach(opt => {
+      const isSelected = opt.dataset.ide === ideConfig.ide ||
+        (opt.dataset.ide === 'custom' && ideConfig.ide === 'custom')
+      opt.classList.toggle('selected', isSelected)
+    })
+
+    // Update button tooltip with current IDE
+    const ideNames = {
+      vscode: 'VS Code',
+      cursor: 'Cursor',
+      idea: 'IntelliJ IDEA',
+      webstorm: 'WebStorm',
+      zed: 'Zed',
+      neovim: 'Neovim',
+      custom: 'Custom'
+    }
+    const ideName = ideNames[ideConfig.ide] || ideConfig.ide
+    openIdeBtn.title = `Open in ${ideName}`
   }
 
   function updateUsageDisplay() {
